@@ -1,0 +1,7 @@
+{
+  "name": "document_analysis",
+  "description": "Analyze supplied documents with evidence-grounded summaries and explicit uncertainty.",
+  "version": "1.0.0",
+  "tags": ["documents", "analysis", "summarization"],
+  "enabled": true
+}
