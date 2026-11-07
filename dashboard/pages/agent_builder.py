@@ -37,6 +37,7 @@ def render(services: AppServices) -> None:
             ProviderName.OPENAI,
             ProviderName.GEMINI,
             ProviderName.OPENROUTER,
+            ProviderName.GROQ,
             ProviderName.OLLAMA,
             ProviderName.OPENAI_COMPATIBLE,
         ]
@@ -49,6 +50,7 @@ def render(services: AppServices) -> None:
                 ProviderName.OPENAI: "OpenAI",
                 ProviderName.GEMINI: "Google Gemini",
                 ProviderName.OPENROUTER: "OpenRouter",
+                ProviderName.GROQ: "Groq",
                 ProviderName.OLLAMA: "Ollama (local)",
                 ProviderName.OPENAI_COMPATIBLE: "Custom OpenAI-compatible",
             }[item],
@@ -57,6 +59,7 @@ def render(services: AppServices) -> None:
             ProviderName.OPENAI: "gpt-4o-mini",
             ProviderName.GEMINI: "gemini-2.5-flash",
             ProviderName.OPENROUTER: "openai/gpt-4o-mini",
+            ProviderName.GROQ: "llama-3.3-70b-versatile",
             ProviderName.OLLAMA: "llama3.2",
             ProviderName.OPENAI_COMPATIBLE: "model-name",
         }[provider]

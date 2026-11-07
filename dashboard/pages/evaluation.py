@@ -49,7 +49,7 @@ def render(services: AppServices) -> None:
         with st.expander("Agent response"):
             st.markdown(selected["result"])
 
-    if st.button("Record automatic execution evaluation", icon="✓"):
+    if st.button("Record automatic execution evaluation", icon=":material/check:"):
         services.evaluation_manager.evaluate_execution(run_id)
         st.success("Execution status and tool events recorded as an automatic evaluation.")
         st.rerun()

@@ -8,8 +8,10 @@ from core.enums import ProviderName
 from providers.base_provider import LLMProvider, ProviderConfigurationError
 from providers.gemini_provider import GeminiProvider
 from providers.openai_compatible_provider import (
+    GROQ_BASE_URL,
     OLLAMA_BASE_URL,
     OPENROUTER_BASE_URL,
+    GroqProvider,
     OllamaProvider,
     OpenAICompatibleProvider,
     OpenRouterProvider,
@@ -32,6 +34,8 @@ def create_provider(
         return GeminiProvider(api_key=api_key, client=client)
     if provider is ProviderName.OPENROUTER:
         return OpenRouterProvider(api_key=api_key, client=client, base_url=base_url or OPENROUTER_BASE_URL)
+    if provider is ProviderName.GROQ:
+        return GroqProvider(api_key=api_key, client=client, base_url=base_url or GROQ_BASE_URL)
     if provider is ProviderName.OLLAMA:
         return OllamaProvider(api_key=api_key, client=client, base_url=base_url or OLLAMA_BASE_URL)
     if provider is ProviderName.OPENAI_COMPATIBLE:

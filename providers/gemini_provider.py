@@ -158,11 +158,29 @@ def _serialize_tools(tools: list[ToolDefinition]) -> dict[str, Any]:
             {
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": tool.parameters,
+                "parameters": _gemini_schema(tool.parameters),
             }
             for tool in tools
         ]
     }
+
+
+def _gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    unsupported_keywords = {"additionalProperties", "maxLength", "minLength", "title"}
+    normalized: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in unsupported_keywords:
+            continue
+        if isinstance(value, dict):
+            normalized[key] = _gemini_schema(value)
+        elif isinstance(value, list):
+            normalized[key] = [
+                _gemini_schema(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            normalized[key] = value
+    return normalized
 
 
 def _normalize_gemini_usage(metadata: Any) -> tuple[TokenUsage, dict[str, Any]]:

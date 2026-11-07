@@ -8,8 +8,9 @@ from core.enums import ProviderName
 from core.schemas import ChatMessage, ProviderRequest, ToolDefinition
 from providers.base_provider import ProviderConfigurationError, ProviderRequestError
 from providers.gemini_provider import GeminiProvider
-from providers.openai_compatible_provider import OllamaProvider, OpenRouterProvider
+from providers.openai_compatible_provider import GroqProvider, OllamaProvider, OpenRouterProvider
 from providers.provider_factory import create_provider
+from tools.available.calculator import CalculatorInput
 
 
 def openai_compatible_client(response=None):
@@ -79,6 +80,40 @@ def test_openrouter_requires_key_and_ollama_defaults_to_local_endpoint() -> None
     assert response.content == "Local answer"
     assert response.usage.input_tokens is None
     assert response.usage.is_estimated is False
+
+
+def test_groq_uses_openai_compatible_endpoint_and_requires_key() -> None:
+    response = SimpleNamespace(
+        model="llama-3.3-70b-versatile",
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content="Groq response", tool_calls=None),
+                finish_reason="stop",
+            )
+        ],
+        usage=SimpleNamespace(prompt_tokens=9, completion_tokens=4, total_tokens=13),
+    )
+    client = openai_compatible_client(response)
+
+    provider = create_provider(
+        ProviderName.GROQ,
+        SecretStr("groq-key"),
+        client=client,
+    )
+    result = provider.complete(
+        ProviderRequest(
+            model="llama-3.3-70b-versatile",
+            messages=[ChatMessage(role="user", content="Hello")],
+        )
+    )
+
+    assert isinstance(provider, GroqProvider)
+    assert provider.base_url == "https://api.groq.com/openai/v1"
+    assert result.provider is ProviderName.GROQ
+    assert result.content == "Groq response"
+    assert result.usage.input_tokens == 9
+    with pytest.raises(ProviderConfigurationError, match="API key is required"):
+        create_provider(ProviderName.GROQ, client=openai_compatible_client())
 
 
 def test_factory_constructs_each_supported_provider_and_custom_endpoint() -> None:
@@ -163,6 +198,32 @@ def test_gemini_maps_messages_tools_usage_and_response() -> None:
     assert sent["config"]["system_instruction"] == "Be accurate."
     assert sent["config"]["http_options"]["timeout"] == 35_000
     assert sent["config"]["tools"][0]["function_declarations"][0]["name"] == "lookup"
+
+
+def test_gemini_normalizes_pydantic_tool_schema() -> None:
+    generate_content = Mock(return_value=SimpleNamespace(candidates=[], usage_metadata=None))
+    client = SimpleNamespace(models=SimpleNamespace(generate_content=generate_content))
+    provider = GeminiProvider("gemini-key", client=client)
+
+    provider.complete(
+        ProviderRequest(
+            model="gemini-test",
+            messages=[ChatMessage(role="user", content="Calculate 1 + 1")],
+            tools=[
+                ToolDefinition(
+                    name="calculator",
+                    parameters=CalculatorInput.model_json_schema(),
+                )
+            ],
+        )
+    )
+
+    schema = generate_content.call_args.kwargs["config"]["tools"][0]["function_declarations"][0]["parameters"]
+    assert schema == {
+        "properties": {"expression": {"type": "string"}},
+        "required": ["expression"],
+        "type": "object",
+    }
 
 
 def test_gemini_serializes_tool_results_and_sanitizes_errors() -> None:

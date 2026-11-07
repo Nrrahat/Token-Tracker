@@ -1,4 +1,4 @@
-"""OpenAI-compatible adapters for OpenRouter, Ollama, and custom endpoints."""
+"""OpenAI-compatible adapters for Groq, OpenRouter, Ollama, and custom endpoints."""
 
 import json
 from collections.abc import Mapping
@@ -17,6 +17,7 @@ from providers.base_provider import (
 
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 
@@ -100,6 +101,25 @@ class OpenRouterProvider(OpenAICompatibleProvider):
     ) -> None:
         super().__init__(
             ProviderName.OPENROUTER,
+            api_key,
+            base_url,
+            client=client,
+            require_api_key=True,
+        )
+
+
+class GroqProvider(OpenAICompatibleProvider):
+    """Groq adapter using its OpenAI-compatible API endpoint."""
+
+    def __init__(
+        self,
+        api_key: SecretStr | str | None,
+        *,
+        client: Any | None = None,
+        base_url: str = GROQ_BASE_URL,
+    ) -> None:
+        super().__init__(
+            ProviderName.GROQ,
             api_key,
             base_url,
             client=client,

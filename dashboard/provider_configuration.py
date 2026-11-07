@@ -5,6 +5,7 @@ import streamlit as st
 
 from core.enums import ProviderName
 from providers.base_provider import ProviderConfigurationError, LLMProvider
+from providers.openai_compatible_provider import GROQ_BASE_URL
 from providers.provider_factory import create_provider
 
 
@@ -12,6 +13,7 @@ _KEYS = {
     ProviderName.OPENAI: "openai_api_key",
     ProviderName.GEMINI: "gemini_api_key",
     ProviderName.OPENROUTER: "openrouter_api_key",
+    ProviderName.GROQ: "groq_api_key",
     ProviderName.OLLAMA: "ollama_api_key",
 }
 
@@ -47,6 +49,8 @@ def create_session_provider(provider: ProviderName) -> LLMProvider:
             "openrouter_base_url",
             "https://openrouter.ai/api/v1",
         ).strip()
+    elif provider is ProviderName.GROQ:
+        base_url = GROQ_BASE_URL
 
     if provider is not ProviderName.OLLAMA and not api_key:
         raise ProviderConfigurationError(provider, f"Configure a {provider.value} API key in Provider Settings")

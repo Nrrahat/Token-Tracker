@@ -20,7 +20,7 @@ uv run streamlit run app.py
 
 Then open `http://localhost:8501`. The default SQLite database is `storage/agent_observability.db`; startup applies pending Alembic migrations. The initial schema-adoption and subsequent history migrations are forward-only to protect existing data; back up before upgrades.
 
-`.env.example` contains `AOP_DATABASE_URL` and `AOP_LOG_LEVEL`. Provider credentials are not read from `.env`: enter the OpenAI API key in Provider Settings. The key is kept in Streamlit session state for the current browser session and passed to the adapter at request time.
+`.env.example` contains `AOP_DATABASE_URL` and `AOP_LOG_LEVEL`. Provider credentials are not read from `.env`: enter the API key for your chosen provider in Provider Settings. Keys are kept in Streamlit session state for the current browser session and passed to the adapter at request time.
 
 ### Pip setup
 
@@ -43,14 +43,14 @@ For a development checkout, run the tests with:
 uv run pytest
 ```
 
-The OpenAI and Gemini SDKs are included in the `providers` extra. OpenRouter uses OpenAI's SDK against its compatible endpoint. Ollama uses the same protocol at its local endpoint and does not require a key by default. Anthropic remains unimplemented; its SDK is isolated in the optional `additional-providers` extra.
+The OpenAI and Gemini SDKs are included in the `providers` extra. OpenRouter and Groq use OpenAI's SDK against their compatible endpoints. Ollama uses the same protocol at its local endpoint and does not require a key by default. Anthropic remains unimplemented; its SDK is isolated in the optional `additional-providers` extra.
 
 ## Foundation architecture
 
 - `config/` owns environment-backed settings, constants, and logging configuration.
 - `core/` holds validated boundary schemas and shared enums.
 - `database/` owns SQLAlchemy entities and SQLite engine/session setup.
-- `providers/` defines the common adapter protocol and adapters for OpenAI, Gemini, OpenRouter, and Ollama, plus custom OpenAI-compatible endpoints.
+- `providers/` defines the common adapter protocol and adapters for OpenAI, Gemini, OpenRouter, Groq, and Ollama, plus custom OpenAI-compatible endpoints.
 - `token_engine/` estimates explicit prompt components with tiktoken and compares them with normalized provider usage.
 - `instrumentation/` persists ordered events and LLM-call usage, measures latency, estimates configured costs, and loads trace summaries.
 - `tools/` contains an allowlisted tool registry, schema validation, bounded calculator and document reader, execution metrics, and estimated output token counts.
@@ -61,7 +61,7 @@ The OpenAI and Gemini SDKs are included in the `providers` extra. OpenRouter use
 - `experiments/` snapshots paired agent configurations and repeatable datasets, runs baseline/optimized cases, and compares persisted outcomes.
 - `tests/` verifies persistence, provider normalization, token attribution, instrumentation, tools, skills, and the mocked agent runtime.
 
-Provider credentials are not part of the database schema or agent configuration. Supply a key to `create_provider(ProviderName.OPENAI, SecretStr(key))` or `create_provider(ProviderName.GEMINI, SecretStr(key))`; OpenRouter requires a key, while Ollama is key-optional by default. Credentials are held in memory only and excluded from normalized error messages. The Streamlit Provider Settings page keeps credentials and endpoints in the current browser session only.
+Provider credentials are not part of the database schema or agent configuration. Supply a key to `create_provider(ProviderName.OPENAI, SecretStr(key))` or `create_provider(ProviderName.GEMINI, SecretStr(key))`; OpenRouter and Groq require a key, while Ollama is key-optional by default. Credentials are held in memory only and excluded from normalized error messages. The Streamlit Provider Settings page keeps credentials and endpoints in the current browser session only.
 
 To make an optional live request from a Python shell, prompt for the key without echoing or saving it:
 
@@ -105,7 +105,7 @@ Execution is synchronous. Cancellation is checked between provider/tool operatio
 - Agent Builder creates and edits model/instruction/limit settings and attaches discovered skills and registered tools.
 - Skill Manager displays versioned skill instructions and toggles enabled state.
 - Tool Manager displays schemas and in-process metrics, and uploads bounded documents for the confined reader.
-- Task Execution submits a task to an active agent; an OpenAI key must first be set in Provider Settings.
+- Task Execution submits a task to an active agent; the key for its configured provider must first be set in Provider Settings.
 - Execution Traces displays ordered events and normalized LLM-call records.
 - Token Analytics separates reported tokens, component estimates, and attribution gaps.
 - Tool Analytics summarizes persisted tool events and subsequent-request result estimates.

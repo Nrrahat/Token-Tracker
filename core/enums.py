@@ -9,6 +9,7 @@ class ProviderName(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI_COMPATIBLE = "openai_compatible"
     OPENROUTER = "openrouter"
+    GROQ = "groq"
     OLLAMA = "ollama"
 
 
