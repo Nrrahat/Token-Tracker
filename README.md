@@ -91,7 +91,9 @@ Token estimates can be generated without an API call. `TiktokenTokenizer` select
 
 `config/model_pricing.json` starts with an empty `models` list. Add verified entries using `provider`, exact `model`, `input_price_per_million`, `output_price_per_million`, optional `cached_input_price_per_million`, `currency`, and `effective_date`. Until a matching entry and complete reported input/output usage are available, estimated cost remains unset. Cost figures are estimates, not provider billing records.
 
-Phase 5 includes an AST-allowlisted arithmetic calculator and a UTF-8 reader restricted to a configured root directory, a 1 MB default file limit, and `.txt`, `.md`, `.csv`, and `.json` files. The Tool Manager page uploads documents into that confined directory and prevents overwrite. No Python or shell execution is registered. Tool outputs are not counted as provider token usage automatically; the tool result can be explicitly converted to a prompt component when the runtime includes it in a later request. Tool timeouts bound how long the caller waits, but Python threads cannot forcibly stop a tool that is already running, so only trusted, bounded implementations should be registered.
+Phase 5 includes an AST-allowlisted arithmetic calculator and a UTF-8 reader restricted to a configured root directory, a 1 MB default file limit, and `.txt`, `.md`, `.csv`, and `.json` files. The Tool Manager page uploads documents into that confined directory and prevents overwrite. No unrestricted Python or shell execution is registered. Tool outputs are not counted as provider token usage automatically; the tool result can be explicitly converted to a prompt component when the runtime includes it in a later request. Tool timeouts bound how long the caller waits, but Python threads cannot forcibly stop a tool that is already running, so only trusted, bounded implementations should be registered.
+
+The Tool Builder stores custom tool source in `custom_tools/<name>.py` and metadata in `custom_tools/tools.json`. Saved tools are loaded into the explicit tool registry at application startup and can be selected in Agent Builder. Agent execution runs the same restricted Python subset in a separate process with bounded inputs and output, range and sequence limits, and a two-second timeout. Imports, attribute access, and file/network APIs are unavailable to custom code. This is not an OS-level sandbox for hostile code; only run custom tools you trust.
 
 ## Agent runtime
 
@@ -105,6 +107,7 @@ Execution is synchronous. Cancellation is checked between provider/tool operatio
 - Agent Builder creates and edits model/instruction/limit settings and attaches discovered skills and registered tools.
 - Skill Manager displays versioned skill instructions and toggles enabled state.
 - Tool Manager displays schemas and in-process metrics, and uploads bounded documents for the confined reader.
+- Tool Builder creates, tests, edits, and deletes persisted custom tools, which are available to agents through the tool allowlist.
 - Task Execution submits a task to an active agent; the key for its configured provider must first be set in Provider Settings.
 - Execution Traces displays ordered events and normalized LLM-call records.
 - Token Analytics separates reported tokens, component estimates, and attribution gaps.

@@ -14,6 +14,7 @@ from dashboard.pages import (
     skill_manager,
     task_execution,
     token_analytics,
+    tool_builder,
     tool_manager,
     tool_analytics,
 )
@@ -40,6 +41,7 @@ with st.sidebar:
             "Agent builder",
             "Skill manager",
             "Tool manager",
+            "Tool Builder",
             "Task execution",
             "Execution traces",
             "Token analytics",
@@ -67,6 +69,11 @@ pages = {
     "Agent builder": lambda: agent_builder.render(services),
     "Skill manager": lambda: skill_manager.render(services),
     "Tool manager": lambda: tool_manager.render(services),
+    "Tool Builder": lambda: tool_builder.render(
+        services.custom_tool_store,
+        services.tool_registry,
+        services.agent_manager,
+    ),
     "Task execution": lambda: task_execution.render(services),
     "Execution traces": lambda: execution_traces.render(services),
     "Token analytics": lambda: token_analytics.render(services),

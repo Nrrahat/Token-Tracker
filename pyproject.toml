@@ -16,7 +16,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ui = ["pandas>=2.2,<4.0", "plotly>=5.20,<7.0", "streamlit>=1.40,<2.0"]
+ui = [
+    "pandas>=2.2,<4.0",
+    "plotly>=5.20,<7.0",
+    "streamlit>=1.40,<2.0",
+    "streamlit-ace>=0.1.1,<1.0",
+]
 providers = ["openai>=1.25,<3.0", "google-genai>=1.0,<2.0"]
 additional-providers = ["anthropic>=0.25"]
 tokenization = ["tiktoken>=0.7,<1.0"]

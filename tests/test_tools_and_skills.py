@@ -9,6 +9,12 @@ from skills.skill_registry import SkillNotFoundError, SkillRegistry
 from tools.available.calculator import CalculatorTool
 from tools.available.safe_document_reader import SafeDocumentReaderTool
 from tools.base_tool import BaseTool, ToolStatus
+from tools.custom_tool_store import (
+    CustomToolAlreadyExistsError,
+    CustomToolStorageError,
+    CustomToolStore,
+)
+from tools.custom_tool_testing import test_custom_tool as run_custom_tool_test
 from tools.tool_manager import ToolManager
 from tools.tool_registry import ToolNotFoundError, ToolRegistry
 
@@ -16,6 +22,123 @@ from tools.tool_registry import ToolNotFoundError, ToolRegistry
 class CharacterTokenizer:
     def count_text(self, text: str) -> int:
         return len(text)
+
+
+def test_custom_tool_store_persists_metadata_and_source_across_instances(tmp_path: Path) -> None:
+    source = "def run(arguments):\n    return {'value': 42}\n"
+    first_store = CustomToolStore(tmp_path / "custom_tools")
+
+    metadata = first_store.create(
+        "answer_tool",
+        "Returns a fixed answer.",
+        "run",
+        source,
+    )
+    reopened_store = CustomToolStore(tmp_path / "custom_tools")
+
+    assert metadata.name == "answer_tool"
+    assert (tmp_path / "custom_tools" / "answer_tool.py").read_text(encoding="utf-8") == source
+    assert reopened_store.list_tools() == [metadata]
+    assert reopened_store.get("answer_tool").source == source
+    registry = reopened_store.registry_path.read_text(encoding="utf-8")
+    assert '"version": 1' in registry
+    assert '"function_name": "run"' in registry
+
+
+def test_custom_tool_store_rejects_duplicate_names_and_invalid_function_names(tmp_path: Path) -> None:
+    store = CustomToolStore(tmp_path / "custom_tools")
+    store.create("answer_tool", "Description", "run", "def run(arguments): return 42")
+
+    with pytest.raises(CustomToolAlreadyExistsError):
+        store.create("answer_tool", "Duplicate", "run", "def run(arguments): return 0")
+    with pytest.raises(ValueError, match="valid, non-keyword Python identifier"):
+        store.create("another_tool", "Description", "class", "pass")
+    with pytest.raises(ValueError, match="Invalid custom tool metadata"):
+        store.create("../outside", "Description", "run", "pass")
+
+
+def test_custom_tool_store_reports_corrupt_registry(tmp_path: Path) -> None:
+    root = tmp_path / "custom_tools"
+    root.mkdir()
+    (root / "tools.json").write_text("{invalid", encoding="utf-8")
+
+    with pytest.raises(CustomToolStorageError, match="Could not read"):
+        CustomToolStore(root).list_tools()
+
+
+def test_custom_tool_store_updates_and_deletes_saved_tools(tmp_path: Path) -> None:
+    store = CustomToolStore(tmp_path / "custom_tools")
+    store.create("answer_tool", "Original", "run", "def run(arguments): return 1")
+
+    updated = store.update(
+        "answer_tool",
+        "Updated description",
+        "calculate",
+        "def calculate(arguments): return {'value': 2}",
+    )
+
+    assert updated.description == "Updated description"
+    assert store.get("answer_tool").source == "def calculate(arguments): return {'value': 2}"
+    assert store.get("answer_tool").metadata.function_name == "calculate"
+    store.delete("answer_tool")
+    assert store.list_tools() == []
+    assert not (tmp_path / "custom_tools" / "answer_tool.py").exists()
+    with pytest.raises(LookupError):
+        store.get("answer_tool")
+    with pytest.raises(LookupError):
+        store.delete("answer_tool")
+
+
+def test_custom_tool_test_runs_safe_code_in_a_separate_process() -> None:
+    result = run_custom_tool_test(
+        "def run(arguments: dict[str, object]) -> dict[str, object]:\n"
+        "    print('testing')\n"
+        "    return {'answer': arguments['number'] * 2}\n",
+        "run",
+        {"number": 21},
+    )
+
+    assert result.success
+    assert result.output == {"answer": 42}
+    assert result.stdout == "testing\n"
+
+
+def test_custom_tool_test_enforces_a_process_timeout() -> None:
+    source = (
+        "def run(arguments):\n"
+        "    total = 0\n"
+        "    for left in range(10000):\n"
+        "        for right in range(10000):\n"
+        "            total += left + right\n"
+        "    return total\n"
+    )
+
+    result = run_custom_tool_test(source, "run", {})
+
+    assert not result.success
+    assert result.error == "Custom tool test exceeded the 2-second limit."
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_error"),
+    [
+        ("def run(arguments):\n    import os\n", "Import is not allowed"),
+        ("def run(arguments):\n    return arguments.__class__\n", "Attribute"),
+        ("def run(arguments):\n    while True:\n        pass\n", "While is not allowed"),
+        ("def wrong(arguments):\n    return 1\n", "Define 'run(arguments)'"),
+        ("def run(arguments):\n    return [0] * 100001\n", "exceeded the supported size"),
+        ("def run(arguments):\n    return int('invalid')\n", "ValueError"),
+    ],
+)
+def test_custom_tool_test_rejects_unsafe_or_invalid_code(
+    source: str,
+    expected_error: str,
+) -> None:
+    result = run_custom_tool_test(source, "run", {})
+
+    assert not result.success
+    assert result.error is not None
+    assert expected_error.lower() in result.error.lower()
 
 
 def test_calculator_accepts_arithmetic_and_rejects_code_execution() -> None:

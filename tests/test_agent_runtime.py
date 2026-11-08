@@ -16,6 +16,8 @@ from instrumentation.trace_manager import TraceManager
 from providers.base_provider import LLMProvider
 from skills.skill_registry import SkillRegistry
 from tools.available.calculator import CalculatorTool
+from tools.custom_python_tool import sync_custom_tools
+from tools.custom_tool_store import CustomToolStore
 from tools.tool_manager import ToolManager
 from tools.tool_registry import ToolRegistry
 
@@ -39,6 +41,7 @@ def runtime_environment(tmp_path):
     session_factory = create_session_factory(engine)
     tool_registry = ToolRegistry()
     tool_registry.register(CalculatorTool())
+    custom_tool_store = CustomToolStore(tmp_path / "custom_tools")
     skill_root = Path(__file__).parents[1] / "skills" / "available"
     skill_registry = SkillRegistry(skill_root)
     agent_manager = AgentManager(session_factory, skill_registry, tool_registry)
@@ -54,7 +57,7 @@ def runtime_environment(tmp_path):
         llm_tracker,
         event_tracker,
     )
-    yield session_factory, agent_manager, tool_manager, executor
+    yield session_factory, agent_manager, tool_manager, executor, tool_registry, custom_tool_store
     tool_manager.shutdown()
     engine.dispose()
 
@@ -103,7 +106,7 @@ def make_agent_config(**overrides) -> AgentConfig:
 
 
 def test_agent_manager_persists_config_and_versioned_attachments(runtime_environment) -> None:
-    _, agent_manager, _, _ = runtime_environment
+    _, agent_manager, _, _, _, _ = runtime_environment
 
     agent = agent_manager.create_agent(make_agent_config())
     fetched = agent_manager.get_agent(agent.agent_id)
@@ -119,7 +122,7 @@ def test_agent_manager_persists_config_and_versioned_attachments(runtime_environ
 
 
 def test_agent_manager_replaces_attachments_and_prevents_deleting_task_history(runtime_environment) -> None:
-    session_factory, agent_manager, _, executor = runtime_environment
+    session_factory, agent_manager, _, executor, _, _ = runtime_environment
     agent = agent_manager.create_agent(make_agent_config())
     updated = agent_manager.update_agent(
         agent.agent_id,
@@ -147,7 +150,7 @@ def test_agent_manager_replaces_attachments_and_prevents_deleting_task_history(r
 
 
 def test_complete_task_calls_tool_then_finishes_with_persisted_trace(runtime_environment) -> None:
-    session_factory, agent_manager, tool_manager, executor = runtime_environment
+    session_factory, agent_manager, tool_manager, executor, _, _ = runtime_environment
     agent = agent_manager.create_agent(make_agent_config())
     provider = ScriptedProvider([make_tool_response(), make_final_response()])
 
@@ -191,7 +194,7 @@ def test_complete_task_calls_tool_then_finishes_with_persisted_trace(runtime_env
 
 
 def test_execution_stops_at_iteration_limit(runtime_environment) -> None:
-    _, agent_manager, _, executor = runtime_environment
+    _, agent_manager, _, executor, _, _ = runtime_environment
     agent = agent_manager.create_agent(make_agent_config(max_iterations=1))
     provider = ScriptedProvider([make_tool_response()])
 
@@ -204,7 +207,7 @@ def test_execution_stops_at_iteration_limit(runtime_environment) -> None:
 
 
 def test_execution_enforces_tool_call_limit(runtime_environment) -> None:
-    _, agent_manager, tool_manager, executor = runtime_environment
+    _, agent_manager, tool_manager, executor, _, _ = runtime_environment
     agent = agent_manager.create_agent(make_agent_config(max_tool_calls=0))
     provider = ScriptedProvider([make_tool_response()])
 
@@ -217,7 +220,7 @@ def test_execution_enforces_tool_call_limit(runtime_environment) -> None:
 
 
 def test_cancellation_before_first_request_is_persisted(runtime_environment) -> None:
-    session_factory, agent_manager, _, executor = runtime_environment
+    session_factory, agent_manager, _, executor, _, _ = runtime_environment
     agent = agent_manager.create_agent(make_agent_config())
     provider = ScriptedProvider([])
     cancellation = Event()
@@ -242,7 +245,85 @@ def test_cancellation_before_first_request_is_persisted(runtime_environment) -> 
 
 
 def test_agent_manager_rejects_unregistered_tools(runtime_environment) -> None:
-    _, agent_manager, _, _ = runtime_environment
+    _, agent_manager, _, _, _, _ = runtime_environment
 
     with pytest.raises(LookupError):
         agent_manager.create_agent(make_agent_config(tool_names=["unregistered"]))
+
+
+def test_agent_executes_persisted_custom_tool_from_registry(runtime_environment) -> None:
+    session_factory, agent_manager, tool_manager, executor, registry, custom_store = runtime_environment
+    custom_store.create(
+        "answer_tool",
+        "Add one to the supplied value.",
+        "run",
+        "def run(arguments):\n    return {'answer': arguments['value'] + 1}\n",
+    )
+    assert sync_custom_tools(CustomToolStore(custom_store.root), registry) == ["answer_tool"]
+    agent = agent_manager.create_agent(
+        make_agent_config(skill_names=[], tool_names=["answer_tool"])
+    )
+    provider = ScriptedProvider(
+        [
+            ProviderResponse(
+                provider=ProviderName.OPENAI,
+                model="test-model",
+                tool_calls=[
+                    ToolCall(
+                        id="custom-call-1",
+                        name="answer_tool",
+                        arguments={"value": 41},
+                    )
+                ],
+                latency_ms=1.0,
+                finish_reason="tool_calls",
+            ),
+            make_final_response("The answer is 42."),
+        ]
+    )
+
+    result = executor.execute(agent.agent_id, "Calculate the answer.", provider)
+
+    assert result.status is ExecutionStatus.SUCCEEDED
+    assert len(provider.requests[0].tools) == 1
+    assert provider.requests[0].tools[0].name == "answer_tool"
+    assert provider.requests[0].tools[0].parameters["additionalProperties"] is True
+    assert provider.requests[1].messages[-1].tool_call_id == "custom-call-1"
+    assert provider.requests[1].messages[-1].content == '{"answer":42}'
+    assert tool_manager.metrics()["answer_tool"].call_count == 1
+    trace = TraceManager(session_factory).get_trace(result.run_id)
+    assert trace is not None
+    assert any(event.event_type == EventType.TOOL_COMPLETED.value for event in trace.events)
+
+    custom_store.update(
+        "answer_tool",
+        "Add two to the supplied value.",
+        "run",
+        "def run(arguments):\n    return {'answer': arguments['value'] + 2}\n",
+    )
+    sync_custom_tools(custom_store, registry)
+    updated_provider = ScriptedProvider(
+        [
+            ProviderResponse(
+                provider=ProviderName.OPENAI,
+                model="test-model",
+                tool_calls=[
+                    ToolCall(
+                        id="custom-call-2",
+                        name="answer_tool",
+                        arguments={"value": 40},
+                    )
+                ],
+                latency_ms=1.0,
+                finish_reason="tool_calls",
+            ),
+            make_final_response("The answer is 42."),
+        ]
+    )
+    updated_result = executor.execute(agent.agent_id, "Calculate again.", updated_provider)
+    assert updated_result.status is ExecutionStatus.SUCCEEDED
+    assert updated_provider.requests[1].messages[-1].content == '{"answer":42}'
+
+    custom_store.delete("answer_tool")
+    sync_custom_tools(custom_store, registry)
+    assert "answer_tool" not in {tool.name for tool in registry.list_tools()}

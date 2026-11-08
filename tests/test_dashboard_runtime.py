@@ -31,6 +31,9 @@ def test_dashboard_services_apply_migrations_and_register_safe_capabilities(
     assert [skill.metadata.name for skill in services.skill_registry.discover()] == [
         "document_analysis"
     ]
+    assert services.custom_tool_store.registry_path == (
+        Path(__file__).parents[1] / "custom_tools" / "tools.json"
+    )
     assert services.agent_manager.list_agents() == []
     assert services.evaluation_manager.summary().automatic_evaluations == 0
     assert services.experiment_manager.list_experiments() == []

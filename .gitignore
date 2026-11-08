@@ -12,3 +12,5 @@ storage/*.db
 storage/logs/
 storage/uploaded_files/
 storage/reports/
+/custom_tools/*.py
+/custom_tools/tools.json

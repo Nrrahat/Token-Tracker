@@ -26,6 +26,8 @@ from skills.skill_registry import SkillRegistry
 from token_engine.tokenizer import TiktokenTokenizer
 from tools.available.calculator import CalculatorTool
 from tools.available.safe_document_reader import SafeDocumentReaderTool
+from tools.custom_python_tool import sync_custom_tools
+from tools.custom_tool_store import CustomToolStore
 from tools.tool_manager import ToolManager
 from tools.tool_registry import ToolRegistry
 
@@ -39,6 +41,7 @@ class AppServices:
     skill_registry: SkillRegistry
     tool_registry: ToolRegistry
     tool_manager: ToolManager
+    custom_tool_store: CustomToolStore
     event_tracker: EventTracker
     llm_tracker: LLMTracker
     trace_manager: TraceManager
@@ -68,6 +71,8 @@ def build_services() -> AppServices:
     tool_registry.register(CalculatorTool())
     tool_registry.register(SafeDocumentReaderTool(upload_root))
     tool_manager = ToolManager(tool_registry, tokenizer=tokenizer)
+    custom_tool_store = CustomToolStore(project_root / "custom_tools")
+    sync_custom_tools(custom_tool_store, tool_registry)
 
     skill_registry = SkillRegistry(
         project_root / "skills" / "available",
@@ -109,6 +114,7 @@ def build_services() -> AppServices:
         skill_registry=skill_registry,
         tool_registry=tool_registry,
         tool_manager=tool_manager,
+        custom_tool_store=custom_tool_store,
         event_tracker=event_tracker,
         llm_tracker=llm_tracker,
         trace_manager=trace_manager,
